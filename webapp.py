@@ -297,6 +297,13 @@ async def admin_orders(request: Request):
     return out
 
 
+@router.get("/admin/report")
+async def admin_report(request: Request):
+    """Confirmed-orders summary (per dish + totals) — same data as the 3 PM report."""
+    await _require_admin(request)
+    return await db.report_summary()
+
+
 @router.post("/admin/order/{order_id}/review")
 async def admin_review(order_id: int, request: Request):
     admin = await _require_admin(request)

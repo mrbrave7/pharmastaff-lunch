@@ -275,6 +275,31 @@
       if (pf) pf.addEventListener("change", () => uploadPayment(o.id, pf.files[0]));
     }
 
+    async function copyText(text){
+      try { await navigator.clipboard.writeText(text); return true; } catch(e){}
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        const ok = document.execCommand("copy"); ta.remove(); return ok;
+      } catch(e){ return false; }
+    }
+
+    async function copySummary(){
+      let s;
+      try { s = await getJSON("/api/admin/report"); } catch(e){ return toast("Xatolik."); }
+      if (!s.dishes || !s.dishes.length) return toast("Hozircha tasdiqlangan buyurtma yo'q.");
+      const lines = ["📊 Tasdiqlangan buyurtmalar:"];
+      for (const d of s.dishes) lines.push(`• ${d.name} — ${d.qty} ta (${money(d.subtotal)})`);
+      lines.push("");
+      lines.push(`Jami: ${s.order_count} ta — ${money(s.money)}`);
+      if (s.unpaid) lines.push(`To'lanmagan/kutilayotgan: ${s.unpaid} ta`);
+      const text = lines.join("\n");
+      if (await copyText(text)) toast("Nusxalandi ✅");
+      else if (tg && tg.showAlert) tg.showAlert(text);
+      else toast(text);
+    }
+
     function copyCard(){
       const t = (cfg.card_number || "").replace(/\s+/g, "");
       try { navigator.clipboard.writeText(t); toast("Nusxalandi: " + cfg.card_number); }
@@ -345,6 +370,7 @@
       }
 
       html += "<h2>🧾 Buyurtmalar</h2>";
+      html += `<button class="btn ghost" style="margin-bottom:12px" onclick="copySummary()">📋 Tasdiqlangan buyurtmalar xulosasini nusxalash</button>`;
       if (!orders.length) html += "<p class='muted'>Buyurtmalar yo'q.</p>";
       const lbl = { pending_payment:"To'lov kutilmoqda", awaiting_review:"Tekshiruvda", confirmed:"Tasdiqlandi", rejected:"Rad etilgan", cancelled:"Bekor qilingan" };
       for (const o of orders){
@@ -434,7 +460,7 @@
     }
 
     // expose handlers used in inline onclick
-    Object.assign(window, { bump, openImage, closeImage, copyCard, cancelOrder, toggleOrdering, saveCard, addDish, delDish, review, resetDay });
+    Object.assign(window, { bump, openImage, closeImage, copyCard, copySummary, cancelOrder, toggleOrdering, saveCard, addDish, delDish, review, resetDay });
 
     if (tg){ tg.ready(); tg.expand(); }
     loadAll();

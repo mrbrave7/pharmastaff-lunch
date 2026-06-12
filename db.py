@@ -389,5 +389,7 @@ async def reset_orders() -> list[str]:
         paths = [r["screenshot_path"] for r in await cur.fetchall()]
         await _conn.execute("DELETE FROM order_items")
         await _conn.execute("DELETE FROM orders")
+        # Restart order numbering (#1, #2, …) for the new day / refreshed menu.
+        await _conn.execute("DELETE FROM sqlite_sequence WHERE name='orders'")
         await _conn.commit()
         return paths
