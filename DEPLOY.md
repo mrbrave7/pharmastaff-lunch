@@ -31,8 +31,11 @@ git push -u origin main
 secrets or local data get pushed.
 
 ## 2. Create the Railway service
-1. railway.app → **New Project** → **Deploy from GitHub repo** → pick your repo.
-2. Railway auto-detects Python (uses `requirements.txt` + `Procfile`).
+1. railway.app → **New Project** → **Deploy from GitHub repo** → pick
+   `mrbrave7/pharmastaff-lunch`.
+2. No manual build/start config needed — the repo ships `railway.json` (start command
+   `python main.py`, healthcheck `/health`, auto-restart, 1 replica) plus
+   `requirements.txt` and `.python-version` (Python 3.11).
 
 ## 3. Add a persistent volume
 Service → **Variables**/**Settings** → **Volumes** → **New Volume**, mount path:

@@ -62,6 +62,12 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/uploads", StaticFiles(directory=config.MENU_IMAGE_DIR), name="uploads")
 
 
+@app.get("/health")
+async def health():
+    """Lightweight healthcheck for Railway / uptime monitors."""
+    return {"ok": True}
+
+
 @app.get("/")
 async def index():
     return FileResponse(
