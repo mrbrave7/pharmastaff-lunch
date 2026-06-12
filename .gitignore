@@ -1,0 +1,24 @@
+# Secrets & local data
+.env
+*.db
+*.db-wal
+*.db-shm
+data.json
+
+# Uploaded files (menu photos + payment screenshots)
+/data/
+/static/uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Tushlik buyurtma</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root{
+      --bg:var(--tg-theme-bg-color,#fff); --text:var(--tg-theme-text-color,#111);
+      --hint:var(--tg-theme-hint-color,#8a8a8e); --card:var(--tg-theme-secondary-bg-color,#f3f4f6);
+      --accent:#2e7d5b; --accent-text:#fff; --danger:#d9534f; --line:rgba(0,0,0,.08);
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      background:var(--bg);color:var(--text);padding-bottom:140px}
+    .wrap{padding:14px max(14px,env(safe-area-inset-right)) 14px max(14px,env(safe-area-inset-left))}
+    h1{font-size:19px;margin:6px 2px 12px}
+    h2{font-size:16px;margin:18px 2px 10px}
+    .banner{background:var(--card);border-radius:12px;padding:11px 13px;font-size:14px;margin:0 0 12px}
+    .banner.warn{background:#fff3cd;color:#7a5b00}
+    .banner.ok{background:#e6f4ec;color:#1d6b46}
+    .card{background:var(--card);border-radius:16px;overflow:hidden;margin-bottom:12px;border:1px solid var(--line)}
+    .card img{width:100%;height:190px;object-fit:contain;display:block;background:rgba(128,128,128,.10);cursor:zoom-in}
+    #lightbox{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.93);
+      display:flex;align-items:center;justify-content:center;padding:14px}
+    #lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px}
+    #lbclose{position:fixed;top:calc(10px + env(safe-area-inset-top));right:14px;width:40px;height:40px;
+      border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:21px;cursor:pointer;z-index:1001}
+    .card .body{padding:12px 14px}
+    .card .name{font-size:16px;font-weight:600}
+    .card .price{color:var(--accent);font-weight:700;margin-top:2px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+    .stepper{display:flex;align-items:center;gap:14px}
+    .stepper.dim{opacity:.45}
+    .stepper button{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--accent);
+      background:transparent;color:var(--accent);font-size:20px;line-height:1;cursor:pointer}
+    .stepper .q{min-width:20px;text-align:center;font-weight:600;font-size:16px}
+    .btn{display:block;width:100%;border:none;border-radius:14px;padding:15px;font-size:16px;
+      font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-text)}
+    .btn:disabled{opacity:.5}
+    .btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+    .btn.danger{background:transparent;color:var(--danger);border:1.5px solid var(--danger)}
+    .btn.sm{padding:9px 12px;font-size:14px;width:auto;border-radius:10px}
+    .iconbtn{width:40px;height:40px;flex:none;border-radius:10px;border:1px solid var(--line);
+      background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer}
+    .iconbtn.danger{color:var(--danger);border-color:rgba(217,83,79,.5)}
+    .iconbtn:active{transform:scale(.93)}
+    .bottombar{position:fixed;left:0;right:0;bottom:56px;padding:10px 14px;
+      background:var(--bg);border-top:1px solid var(--line)}
+    .bottombar .sum{font-size:13px;color:var(--hint);margin-bottom:8px;text-align:center}
+    .nav{position:fixed;left:0;right:0;bottom:0;height:56px;display:flex;background:var(--bg);
+      border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+    .nav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:2px;font-size:11px;color:var(--hint);text-decoration:none;cursor:pointer}
+    .nav a.active{color:var(--accent);font-weight:600}
+    .nav .ic{font-size:19px}
+    .field{margin-bottom:10px}
+    .field label{display:block;font-size:13px;color:var(--hint);margin-bottom:4px}
+    .field input{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+      background:var(--bg);color:var(--text);font-size:15px}
+    .cardbox{background:var(--card);border:1px dashed var(--accent);border-radius:12px;padding:14px;
+      text-align:center;margin:12px 0}
+    .cardno{font-size:20px;font-weight:700;letter-spacing:1px;margin:6px 0;word-break:break-all}
+    .orderitem{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)}
+    .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600}
+    .pill.pending{background:#fff3cd;color:#7a5b00}
+    .pill.awaiting_review{background:#dbeafe;color:#1e4fa3}
+    .pill.confirmed{background:#e6f4ec;color:#1d6b46}
+    .adminorder{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:10px}
+    .center{text-align:center;color:var(--hint);padding:40px 16px}
+    .spinner{width:26px;height:26px;margin:0 auto 12px;border:3px solid var(--card);
+      border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    [hidden]{display:none!important}
+    .muted{color:var(--hint);font-size:13px}
+  </style>
+</head>
+<body>
+  <div id="loading" class="center"><div class="spinner"></div>Yuklanmoqda…</div>
+  <div id="fatal" class="center" hidden></div>
+
+  <div id="screen-menu" class="wrap" hidden></div>
+  <div id="screen-order" class="wrap" hidden></div>
+  <div id="screen-admin" class="wrap" hidden></div>
+
+  <div id="lightbox" hidden onclick="closeImage()">
+    <button id="lbclose" aria-label="Yopish" onclick="closeImage()">✕</button>
+    <img id="lbimg" alt="">
+  </div>
+
+  <div id="bottombar" class="bottombar" hidden>
+    <div class="sum" id="barsum"></div>
+    <button class="btn" id="orderbtn">Buyurtma berish</button>
+  </div>
+
+  <div id="nav" class="nav" hidden>
+    <a data-tab="menu" class="active"><span class="ic">🍽</span>Menyu</a>
+    <a data-tab="order"><span class="ic">🧾</span>Buyurtmam</a>
+    <a data-tab="admin" id="navadmin" hidden><span class="ic">⚙️</span>Admin</a>
+  </div>
+
+  <script>
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+    const INIT = tg ? tg.initData : "";
+    const $ = (id) => document.getElementById(id);
+    const HDR = { "X-Telegram-Init-Data": INIT };
+    const JHDR = { ...HDR, "Content-Type": "application/json" };
+
+    let cfg = null, menu = [], myOrder = null, cart = {}, tab = "menu", adminFlash = null;
+
+    const esc = (s) => { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; };
+    const money = (n) => (n || 0).toLocaleString("ru-RU").replace(/,/g, " ") + " " + (cfg?.currency || "so'm");
+    function haptic(){ try{ tg && tg.HapticFeedback.selectionChanged(); }catch(e){} }
+
+    // Fullscreen image viewer (tap image to open, tap anywhere / ✕ / back to close)
+    function openImage(url){
+      if (!url) return;
+      $("lbimg").src = url;
+      $("lightbox").hidden = false;
+      try { if (tg && tg.BackButton){ tg.BackButton.show(); tg.BackButton.onClick(closeImage); } } catch(e){}
+    }
+    function closeImage(){
+      $("lightbox").hidden = true;
+      $("lbimg").src = "";
+      try { if (tg && tg.BackButton){ tg.BackButton.offClick(closeImage); tg.BackButton.hide(); } } catch(e){}
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, opts);
+      if (res.status === 401) throw { code: 401 };
+      let data = null; try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw { code: res.status, detail: data && data.detail };
+      return data;
+    }
+    const getJSON = (p) => api(p, { headers: HDR });
+    const postJSON = (p, body) => api(p, { method: "POST", headers: JHDR, body: JSON.stringify(body || {}) });
+
+    function fatal(msg){ $("loading").hidden = true; $("fatal").hidden = false; $("fatal").textContent = msg; }
+    function toast(msg){ try{ tg && tg.showAlert ? tg.showAlert(msg) : alert(msg); }catch(e){ alert(msg); } }
+
+    // ── load ──
+    async function loadAll() {
+      try {
+        cfg = await getJSON("/api/config");
+      } catch (e) {
+        if (e.code === 401) return fatal("Iltimos, ilovani Telegram orqali oching.");
+        return fatal("Xatolik. Qaytadan urinib ko'ring.");
+      }
+      $("navadmin").hidden = !cfg.is_admin;
+      await Promise.all([loadMenu(), loadMyOrder()]);
+      $("loading").hidden = true;
+      $("nav").hidden = false;
+      switchTab("menu");
+    }
+    async function loadMenu(){ try { menu = await getJSON("/api/menu"); } catch(e){ menu = []; } }
+    async function loadMyOrder(){ try { myOrder = await getJSON("/api/my-order"); } catch(e){ myOrder = null; } }
+
+    // ── nav ──
+    document.querySelectorAll("#nav a").forEach(a =>
+      a.addEventListener("click", () => switchTab(a.dataset.tab)));
+
+    function switchTab(name){
+      tab = name;
+      document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("active", a.dataset.tab === name));
+      $("screen-menu").hidden = name !== "menu";
+      $("screen-order").hidden = name !== "order";
+      $("screen-admin").hidden = name !== "admin";
+      if (name === "menu") renderMenu();
+      if (name === "order") renderOrder();
+      if (name === "admin") renderAdmin();
+      $("bottombar").hidden = !(name === "menu" && cfg.ordering_open && !myOrder && menu.length);
+    }
+
+    // ── MENU ──
+    function renderMenu(){
+      const root = $("screen-menu");
+      let html = "<h1>🍽 Bugungi menyu</h1>";
+      if (!cfg.ordering_open) html += '<div class="banner warn">⏰ Hozircha buyurtmalar yopiq.</div>';
+      if (myOrder) html += '<div class="banner ok">Sizda faol buyurtma bor. «Buyurtmam» bo\'limiga o\'ting.</div>';
+      if (!menu.length){ html += '<div class="center">Menyu hali kiritilmagan.</div>'; root.innerHTML = html; return; }
+
+      const blocked = !cfg.ordering_open || myOrder;
+      for (const it of menu){
+        const q = cart[it.id] || 0;
+        html += `<div class="card">
+          ${it.image_url ? `<img src="${esc(it.image_url)}" alt="" onclick="openImage('${esc(it.image_url)}')">` : ""}
+          <div class="body">
+            <div class="name">${esc(it.name)}</div>
+            <div class="price">${money(it.price)}</div>
+            <div class="row">
+              <span class="muted">Soni</span>
+              <div class="stepper${blocked ? ' dim' : ''}">
+                <button onclick="bump(${it.id},-1)">−</button>
+                <span class="q" id="q${it.id}">${q}</span>
+                <button onclick="bump(${it.id},1)">+</button>
+              </div>
+            </div>
+          </div></div>`;
+      }
+      root.innerHTML = html;
+      updateBar();
+    }
+
+    function bump(id, d){
+      if (!cfg.ordering_open){ toast("Buyurtmalar hozircha yopiq."); return; }
+      if (myOrder){ toast("Sizda faol buyurtma bor. «Buyurtmam» bo'limiga o'ting."); switchTab("order"); return; }
+      cart[id] = Math.max(0, (cart[id] || 0) + d);
+      const el = $("q" + id); if (el) el.textContent = cart[id];
+      haptic(); updateBar();
+    }
+
+    function cartTotals(){
+      let count = 0, total = 0;
+      for (const it of menu){ const q = cart[it.id] || 0; count += q; total += q * it.price; }
+      return { count, total };
+    }
+    function updateBar(){
+      const { count, total } = cartTotals();
+      $("bottombar").hidden = !(tab === "menu" && cfg.ordering_open && !myOrder && menu.length);
+      $("barsum").textContent = count ? `${count} ta tanlandi · Jami: ${money(total)}` : "Taom tanlang";
+      $("orderbtn").disabled = count === 0;
+    }
+
+    $("orderbtn").addEventListener("click", async () => {
+      const items = menu.filter(it => (cart[it.id] || 0) > 0).map(it => ({ id: it.id, qty: cart[it.id] }));
+      if (!items.length) return;
+      $("orderbtn").disabled = true;
+      try {
+        myOrder = await postJSON("/api/order", { items });
+        cart = {};
+        switchTab("order");
+      } catch (e) {
+        if (e.detail === "active_order_exists"){ await loadMyOrder(); switchTab("order"); }
+        else if (e.detail === "ordering_closed") toast("Buyurtmalar yopiq.");
+        else toast("Buyurtma berishda xatolik.");
+      } finally { $("orderbtn").disabled = false; }
+    });
+
+    // ── MY ORDER ──
+    function renderOrder(){
+      const root = $("screen-order");
+      if (!myOrder){ root.innerHTML = "<h1>🧾 Buyurtmam</h1><div class='center'>Faol buyurtmangiz yo'q.</div>"; return; }
+      const o = myOrder;
+      let html = "<h1>🧾 Buyurtmam</h1>";
+      const labels = { pending_payment:"To'lov kutilmoqda", awaiting_review:"Tekshiruvda", confirmed:"Tasdiqlandi" };
+      html += `<div style="margin-bottom:10px"><span class="pill ${o.status}">${labels[o.status] || o.status}</span></div>`;
+      html += '<div class="card"><div class="body">';
+      for (const it of o.items) html += `<div class="orderitem"><span>${esc(it.qty)} × ${esc(it.name)}</span><span>${money(it.qty*it.unit_price)}</span></div>`;
+      html += `<div class="orderitem" style="border:none;font-weight:700"><span>Jami</span><span>${money(o.total)}</span></div>`;
+      html += "</div></div>";
+
+      if (o.status === "pending_payment"){
+        html += `<div class="cardbox">
+          <div class="muted">To'lov uchun karta raqami</div>
+          <div class="cardno" id="cardno">${esc(cfg.card_number)}</div>
+          ${cfg.card_holder ? `<div class="muted">${esc(cfg.card_holder)}</div>` : ""}
+          <div style="margin-top:6px">To'lov summasi: <b>${money(o.total)}</b></div>
+          <button class="btn ghost sm" style="margin-top:10px" onclick="copyCard()">Karta raqamini nusxalash</button>
+        </div>
+        <p class="muted">To'lovni amalga oshirgach, chek rasmini yuklang:</p>
+        <label class="btn" id="paylabel" for="payfile">📷 Chek rasmini yuklash</label>
+        <input id="payfile" type="file" accept="image/*" hidden>
+        <div id="paystatus" class="muted" style="margin-top:8px;text-align:center"></div>`;
+      } else if (o.status === "awaiting_review"){
+        html += '<div class="banner">🕓 Chek yuborildi. Admin tasdig\'ini kuting…</div>';
+      } else if (o.status === "confirmed"){
+        html += '<div class="banner ok">✅ Buyurtmangiz tasdiqlandi! Yoqimli ishtaha 🍽</div>';
+      }
+      if (o.can_cancel)
+        html += `<button class="btn danger" style="margin-top:14px" onclick="cancelOrder(${o.id})">Buyurtmani bekor qilish</button>`;
+      root.innerHTML = html;
+
+      const pf = $("payfile");
+      if (pf) pf.addEventListener("change", () => uploadPayment(o.id, pf.files[0]));
+    }
+
+    function copyCard(){
+      const t = (cfg.card_number || "").replace(/\s+/g, "");
+      try { navigator.clipboard.writeText(t); toast("Nusxalandi: " + cfg.card_number); }
+      catch(e){ toast(cfg.card_number); }
+    }
+
+    async function uploadPayment(orderId, file){
+      if (!file) return;
+      const label = $("paylabel"), status = $("paystatus");
+      if (label){ label.textContent = "⏳ Yuklanmoqda…"; label.style.pointerEvents = "none"; label.style.opacity = ".6"; }
+      if (status){ status.innerHTML = '<span class="spinner" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin:0 6px 0 0"></span>Chek yuborilmoqda, biroz kuting…'; status.style.color = "var(--hint)"; }
+      const fd = new FormData(); fd.append("file", file);
+      try {
+        myOrder = await api(`/api/order/${orderId}/payment`, { method: "POST", headers: HDR, body: fd });
+        haptic();
+        renderOrder();   // transitions to the "Tekshiruvda" confirmation
+      } catch (e) {
+        if (label){ label.textContent = "📷 Chek rasmini yuklash"; label.style.pointerEvents = ""; label.style.opacity = ""; }
+        if (status){ status.textContent = "❌ Yuklashda xatolik. Qaytadan urinib ko'ring."; status.style.color = "var(--danger)"; }
+      }
+    }
+
+    async function cancelOrder(orderId){
+      if (tg && tg.showConfirm){ tg.showConfirm("Buyurtmani bekor qilasizmi?", ok => ok && doCancel(orderId)); }
+      else if (confirm("Buyurtmani bekor qilasizmi?")) doCancel(orderId);
+    }
+    async function doCancel(orderId){
+      try { await postJSON(`/api/order/${orderId}/cancel`); myOrder = null; await loadMenu(); switchTab("menu"); }
+      catch (e) { toast(e.detail === "cutoff_passed" ? "Bekor qilish vaqti tugadi." : "Bekor qilib bo'lmadi."); }
+    }
+
+    // ── ADMIN ──
+    async function renderAdmin(){
+      const root = $("screen-admin");
+      root.innerHTML = "<div class='center'><div class='spinner'></div></div>";
+      let orders = [];
+      try { orders = await getJSON("/api/admin/orders"); } catch(e){}
+
+      let html = "<h1>⚙️ Admin paneli</h1>";
+      if (adminFlash){ html += `<div class="banner ok">${esc(adminFlash)}</div>`; adminFlash = null; }
+      html += `<button class="btn ${cfg.ordering_open ? "danger" : ""}" onclick="toggleOrdering()">
+        ${cfg.ordering_open ? "🔒 Buyurtmalarni yopish" : "🔓 Buyurtmalarni ochish"}</button>`;
+
+      html += "<h2>💳 To'lov kartasi</h2>";
+      html += `<div class="field"><label>Karta raqami</label>
+          <input id="c_num" value="${esc(cfg.card_number || "")}" placeholder="8600 1234 5678 9012"></div>
+        <div class="field"><label>Karta egasi (ixtiyoriy)</label>
+          <input id="c_holder" value="${esc(cfg.card_holder || "")}" placeholder="Ism Familiya"></div>
+        <button class="btn" id="cardbtn" onclick="saveCard()">Kartani saqlash</button>
+        <div id="c_status" class="muted" style="margin-top:8px"></div>`;
+
+      html += "<h2>➕ Taom qo'shish</h2>";
+      html += `<div class="field"><label>Nomi</label><input id="m_name" placeholder="Masalan: Milliy palov"></div>
+        <div class="field"><label>Narxi (${esc(cfg.currency)})</label><input id="m_price" type="number" inputmode="numeric" placeholder="35000"></div>
+        <div class="field"><label>Rasm</label><input id="m_file" type="file" accept="image/*"></div>
+        <button class="btn" id="addbtn" onclick="addDish()">Qo'shish</button>
+        <div id="m_status" class="muted" style="margin-top:8px"></div>`;
+
+      html += "<h2>📋 Menyu</h2>";
+      if (!menu.length) html += "<p class='muted'>Hozircha taom yo'q.</p>";
+      for (const it of menu){
+        html += `<div class="adminorder"><div class="row" style="margin:0">
+          <div><b>${esc(it.name)}</b><div class="muted">${money(it.price)}</div></div>
+          <button class="iconbtn danger" aria-label="O'chirish" onclick="delDish(${it.id})">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+          </button>
+        </div></div>`;
+      }
+
+      html += "<h2>🧾 Buyurtmalar</h2>";
+      if (!orders.length) html += "<p class='muted'>Buyurtmalar yo'q.</p>";
+      const lbl = { pending_payment:"To'lov kutilmoqda", awaiting_review:"Tekshiruvda", confirmed:"Tasdiqlandi", rejected:"Rad etilgan", cancelled:"Bekor qilingan" };
+      for (const o of orders){
+        const list = o.items.map(i => `${i.qty}×${esc(i.name)}`).join(", ");
+        html += `<div class="adminorder">
+          <div class="row" style="margin:0"><b>#${o.id} ${esc(o.name)}</b><span class="muted">${money(o.total)}</span></div>
+          <div class="muted" style="margin:4px 0">${list}</div>
+          <span class="pill ${o.status}">${lbl[o.status] || o.status}</span>
+          ${o.status === "awaiting_review" ? `<div class="row" style="margin-top:8px">
+            <button class="btn sm" onclick="review(${o.id},true)">✅ Qabul</button>
+            <button class="btn danger sm" onclick="review(${o.id},false)">❌ Rad</button></div>` : ""}
+        </div>`;
+      }
+
+      html += `<h2>🔄 Yangi kun</h2>
+        <button class="btn danger" onclick="resetDay()">Hamma buyurtma va menyuni tozalash</button>`;
+      root.innerHTML = html;
+    }
+
+    async function toggleOrdering(){
+      try { const r = await postJSON("/api/admin/ordering", { open: !cfg.ordering_open });
+        cfg.ordering_open = r.ordering_open; renderAdmin(); } catch(e){ toast("Xatolik."); }
+    }
+    async function saveCard(){
+      const num = $("c_num").value.trim();
+      const holder = $("c_holder").value.trim();
+      if (!num) return toast("Karta raqamini kiriting.");
+      const btn = $("cardbtn"), st = $("c_status");
+      btn.disabled = true; btn.textContent = "⏳ Saqlanmoqda…";
+      try {
+        const r = await postJSON("/api/admin/card", { card_number: num, card_holder: holder });
+        cfg.card_number = r.card_number; cfg.card_holder = r.card_holder;
+        adminFlash = "✅ Karta ma'lumotlari saqlandi";
+        haptic(); renderAdmin();
+      } catch(e){
+        btn.disabled = false; btn.textContent = "Kartani saqlash";
+        if (st){ st.textContent = "❌ Saqlashda xatolik."; st.style.color = "var(--danger)"; }
+      }
+    }
+    async function addDish(){
+      const name = $("m_name").value.trim();
+      const price = parseInt($("m_price").value, 10);
+      const file = $("m_file").files[0];
+      if (!name || !(price >= 0) || !file) return toast("Nomi, narxi va rasmni kiriting.");
+      const btn = $("addbtn"), status = $("m_status");
+      btn.disabled = true; btn.textContent = "⏳ Qo'shilmoqda…";
+      if (status){ status.textContent = "Taom qo'shilmoqda…"; status.style.color = "var(--hint)"; }
+      const fd = new FormData(); fd.append("name", name); fd.append("price", price); fd.append("file", file);
+      try {
+        await api("/api/admin/menu", { method: "POST", headers: HDR, body: fd });
+        adminFlash = `✅ «${name}» menyuga qo'shildi`;
+        haptic();
+        await loadMenu(); renderAdmin();
+      } catch(e){
+        btn.disabled = false; btn.textContent = "Qo'shish";
+        if (status){ status.textContent = "❌ Qo'shishda xatolik. Qaytadan urinib ko'ring."; status.style.color = "var(--danger)"; }
+      }
+    }
+    function delDish(id){
+      const it = menu.find(m => m.id === id);
+      const name = it ? it.name : "";
+      const msg = name ? `«${name}» ni o'chirasizmi?` : "Bu taomni o'chirasizmi?";
+      if (tg && tg.showConfirm) tg.showConfirm(msg, ok => ok && doDelDish(id));
+      else if (confirm(msg)) doDelDish(id);
+    }
+    async function doDelDish(id){
+      try {
+        await api(`/api/admin/menu/${id}`, { method: "DELETE", headers: HDR });
+        adminFlash = "🗑 Taom o'chirildi";
+        await loadMenu(); renderAdmin();
+      } catch(e){
+        if (e.detail === "has_orders")
+          toast("Bu taomga buyurtma berilgan — o'chirib bo'lmaydi. Avval buyurtmalarni yakunlang yoki «Yangi kun» qiling.");
+        else toast("O'chirishda xatolik.");
+      }
+    }
+    async function review(id, accept){
+      try { await postJSON(`/api/admin/order/${id}/review`, { accept }); renderAdmin(); }
+      catch(e){ toast("Allaqachon ko'rib chiqilgan."); renderAdmin(); }
+    }
+    async function resetDay(){
+      const go = () => api("/api/admin/reset", { method: "POST", headers: HDR })
+        .then(async () => { cfg.ordering_open = false; cart = {}; myOrder = null; await loadMenu(); renderAdmin(); })
+        .catch(() => toast("Xatolik."));
+      if (tg && tg.showConfirm) tg.showConfirm("Hammasini tozalaysizmi?", ok => ok && go());
+      else if (confirm("Hammasini tozalaysizmi?")) go();
+    }
+
+    // expose handlers used in inline onclick
+    Object.assign(window, { bump, openImage, closeImage, copyCard, cancelOrder, toggleOrdering, saveCard, addDish, delDish, review, resetDay });
+
+    if (tg){ tg.ready(); tg.expand(); }
+    loadAll();
+  </script>
+</body>
+</html>
