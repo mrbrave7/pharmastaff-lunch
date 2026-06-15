@@ -91,7 +91,7 @@
 
   <div id="bottombar" class="bottombar" hidden>
     <div class="sum" id="barsum"></div>
-    <button class="btn" id="orderbtn">Buyurtma berish</button>
+    <div id="barbtns"></div>
   </div>
 
   <div id="nav" class="nav" hidden>
@@ -169,18 +169,23 @@
       if (name === "menu") renderMenu();
       if (name === "order") renderOrder();
       if (name === "admin") renderAdmin();
-      $("bottombar").hidden = !(name === "menu" && cfg.ordering_open && !myOrder && menu.length);
+      if (name !== "menu") $("bottombar").hidden = true;
     }
 
     // ── MENU ──
     function renderMenu(){
       const root = $("screen-menu");
       let html = "<h1>🍽 Bugungi menyu</h1>";
-      if (!cfg.ordering_open) html += '<div class="banner warn">⏰ Hozircha buyurtmalar yopiq.</div>';
-      if (myOrder) html += '<div class="banner ok">Sizda faol buyurtma bor. «Buyurtmam» bo\'limiga o\'ting.</div>';
+      const edit = editing();
+      if (edit && !Object.keys(cart).length){
+        for (const it of myOrder.items) if (it.menu_item_id != null) cart[it.menu_item_id] = it.qty;
+      }
+      if (edit) html += '<div class="banner ok">✏️ Buyurtmangizni tahrirlayapsiz. O\'zgartirib, pastdagi «Buyurtmani yangilash»ni bosing.</div>';
+      else if (myOrder) html += '<div class="banner ok">Sizda faol buyurtma bor. «Buyurtmam» bo\'limiga o\'ting.</div>';
+      else if (!cfg.ordering_open) html += '<div class="banner warn">⏰ Hozircha buyurtmalar yopiq.</div>';
       if (!menu.length){ html += '<div class="center">Menyu hali kiritilmagan.</div>'; root.innerHTML = html; return; }
 
-      const blocked = !cfg.ordering_open || myOrder;
+      const active = edit || (cfg.ordering_open && !myOrder);
       for (const it of menu){
         const q = cart[it.id] || 0;
         html += `<div class="card">
@@ -190,7 +195,7 @@
             <div class="price">${money(it.price)}</div>
             <div class="row">
               <span class="muted">Soni</span>
-              <div class="stepper${blocked ? ' dim' : ''}">
+              <div class="stepper${active ? '' : ' dim'}">
                 <button onclick="bump(${it.id},-1)">−</button>
                 <span class="q" id="q${it.id}">${q}</span>
                 <button onclick="bump(${it.id},1)">+</button>
@@ -202,9 +207,13 @@
       updateBar();
     }
 
+    function editing(){ return !!(myOrder && myOrder.can_edit); }
+
     function bump(id, d){
-      if (!cfg.ordering_open){ toast("Buyurtmalar hozircha yopiq."); return; }
-      if (myOrder){ toast("Sizda faol buyurtma bor. «Buyurtmam» bo'limiga o'ting."); switchTab("order"); return; }
+      if (!editing()){
+        if (myOrder){ toast("Buyurtmangizni hozir o'zgartirib bo'lmaydi."); switchTab("order"); return; }
+        if (!cfg.ordering_open){ toast("Buyurtmalar hozircha yopiq."); return; }
+      }
       cart[id] = Math.max(0, (cart[id] || 0) + d);
       const el = $("q" + id); if (el) el.textContent = cart[id];
       haptic(); updateBar();
@@ -216,43 +225,70 @@
       return { count, total };
     }
     function updateBar(){
+      const edit = editing();
+      const active = edit || (cfg.ordering_open && !myOrder);
+      $("bottombar").hidden = !(tab === "menu" && active && menu.length);
+      if ($("bottombar").hidden) return;
       const { count, total } = cartTotals();
-      $("bottombar").hidden = !(tab === "menu" && cfg.ordering_open && !myOrder && menu.length);
-      $("barsum").textContent = count ? `${count} ta tanlandi · Jami: ${money(total)}` : "Taom tanlang";
-      $("orderbtn").disabled = count === 0;
+      $("barsum").textContent = count ? `${count} ta · Jami: ${money(total)}` : "Taom tanlang";
+      const dis = count === 0 ? "disabled" : "";
+      if (edit){
+        $("barbtns").innerHTML = `<button class="btn" ${dis} onclick="updateOrder()">Buyurtmani yangilash</button>`;
+      } else {
+        $("barbtns").innerHTML =
+          `<div style="display:flex;gap:8px">
+             <button class="btn" style="flex:1;background:#1d6b46" ${dis} onclick="placeOrder('cash')">💵 Naqd</button>
+             <button class="btn" style="flex:1" ${dis} onclick="placeOrder('card')">💳 Karta</button>
+           </div>`;
+      }
     }
 
-    $("orderbtn").addEventListener("click", async () => {
-      const items = menu.filter(it => (cart[it.id] || 0) > 0).map(it => ({ id: it.id, qty: cart[it.id] }));
+    function cartItems(){
+      return menu.filter(it => (cart[it.id] || 0) > 0).map(it => ({ id: it.id, qty: cart[it.id] }));
+    }
+    async function placeOrder(method){
+      const items = cartItems();
       if (!items.length) return;
-      $("orderbtn").disabled = true;
       try {
-        myOrder = await postJSON("/api/order", { items });
-        cart = {};
-        switchTab("order");
+        myOrder = await postJSON("/api/order", { items, payment_method: method });
+        cart = {}; switchTab("order");
       } catch (e) {
         if (e.detail === "active_order_exists"){ await loadMyOrder(); switchTab("order"); }
         else if (e.detail === "ordering_closed") toast("Buyurtmalar yopiq.");
         else toast("Buyurtma berishda xatolik.");
-      } finally { $("orderbtn").disabled = false; }
-    });
+      }
+    }
+    async function updateOrder(){
+      const items = cartItems();
+      if (!items.length) return;
+      try {
+        myOrder = await api(`/api/order/${myOrder.id}`, { method: "PUT", headers: JHDR, body: JSON.stringify({ items }) });
+        cart = {}; toast("Buyurtma yangilandi ✅"); switchTab("order");
+      } catch (e) {
+        toast(e.detail === "cutoff_passed" ? "Vaqt tugadi." : "Yangilashda xatolik.");
+      }
+    }
 
     // ── MY ORDER ──
     function renderOrder(){
       const root = $("screen-order");
       if (!myOrder){ root.innerHTML = "<h1>🧾 Buyurtmam</h1><div class='center'>Faol buyurtmangiz yo'q.</div>"; return; }
       const o = myOrder;
+      const cash = o.payment_method === "cash";
       let html = "<h1>🧾 Buyurtmam</h1>";
-      const labels = { pending_payment:"To'lov kutilmoqda", awaiting_review:"Tekshiruvda", confirmed:"Tasdiqlandi" };
-      html += `<div style="margin-bottom:10px"><span class="pill ${o.status}">${labels[o.status] || o.status}</span></div>`;
+      let label = { pending_payment:"To'lov kutilmoqda", awaiting_review:"Tekshiruvda", confirmed:"Tasdiqlandi" }[o.status] || o.status;
+      if (o.status === "confirmed" && cash) label = "Tasdiqlandi (Naqd)";
+      html += `<div style="margin-bottom:10px"><span class="pill ${o.status}">${label}</span></div>`;
       html += '<div class="card"><div class="body">';
       for (const it of o.items) html += `<div class="orderitem"><span>${esc(it.qty)} × ${esc(it.name)}</span><span>${money(it.qty*it.unit_price)}</span></div>`;
       html += `<div class="orderitem" style="border:none;font-weight:700"><span>Jami</span><span>${money(o.total)}</span></div>`;
       html += "</div></div>";
 
-      if (o.status === "pending_payment"){
+      if (o.status === "confirmed" && cash){
+        html += '<div class="banner ok">✅ Buyurtmangiz qabul qilindi (Naqd). To\'lovni yetkazib berishda amalga oshirasiz. 🍽</div>';
+      } else if (o.status === "pending_payment"){
         html += `<div class="cardbox">
-          <div class="muted">To'lov uchun karta raqami</div>
+          <div class="muted">💳 To'lov uchun karta raqami</div>
           <div class="cardno" id="cardno">${esc(cfg.card_number)}</div>
           ${cfg.card_holder ? `<div class="muted">${esc(cfg.card_holder)}</div>` : ""}
           <div style="margin-top:6px">To'lov summasi: <b>${money(o.total)}</b></div>
@@ -267,8 +303,10 @@
       } else if (o.status === "confirmed"){
         html += '<div class="banner ok">✅ Buyurtmangiz tasdiqlandi! Yoqimli ishtaha 🍽</div>';
       }
+      if (o.can_edit)
+        html += `<button class="btn ghost" style="margin-top:14px" onclick="switchTab('menu')">✏️ Tahrirlash / Taom qo'shish</button>`;
       if (o.can_cancel)
-        html += `<button class="btn danger" style="margin-top:14px" onclick="cancelOrder(${o.id})">Buyurtmani bekor qilish</button>`;
+        html += `<button class="btn danger" style="margin-top:10px" onclick="cancelOrder(${o.id})">Buyurtmani bekor qilish</button>`;
       root.innerHTML = html;
 
       const pf = $("payfile");
@@ -292,6 +330,9 @@
       const lines = ["📊 Tasdiqlangan buyurtmalar:"];
       for (const d of s.dishes) lines.push(`• ${d.name} — ${d.qty} ta (${money(d.subtotal)})`);
       lines.push("");
+      const card = s.card || { n: 0, money: 0 }, csh = s.cash || { n: 0, money: 0 };
+      lines.push(`💳 Karta: ${card.n} ta — ${money(card.money)}`);
+      lines.push(`💵 Naqd: ${csh.n} ta — ${money(csh.money)}`);
       lines.push(`Jami: ${s.order_count} ta — ${money(s.money)}`);
       if (s.unpaid) lines.push(`To'lanmagan/kutilayotgan: ${s.unpaid} ta`);
       const text = lines.join("\n");
@@ -375,10 +416,11 @@
       const lbl = { pending_payment:"To'lov kutilmoqda", awaiting_review:"Tekshiruvda", confirmed:"Tasdiqlandi", rejected:"Rad etilgan", cancelled:"Bekor qilingan" };
       for (const o of orders){
         const list = o.items.map(i => `${i.qty}×${esc(i.name)}`).join(", ");
+        const pm = o.payment_method === "cash" ? "💵 Naqd" : "💳 Karta";
         html += `<div class="adminorder">
           <div class="row" style="margin:0"><b>#${o.id} ${esc(o.name)}</b><span class="muted">${money(o.total)}</span></div>
           <div class="muted" style="margin:4px 0">${list}</div>
-          <span class="pill ${o.status}">${lbl[o.status] || o.status}</span>
+          <span class="pill ${o.status}">${lbl[o.status] || o.status}</span> <span class="muted">· ${pm}</span>
           ${o.status === "awaiting_review" ? `<div class="row" style="margin-top:8px">
             <button class="btn sm" onclick="review(${o.id},true)">✅ Qabul</button>
             <button class="btn danger sm" onclick="review(${o.id},false)">❌ Rad</button></div>` : ""}
@@ -460,7 +502,7 @@
     }
 
     // expose handlers used in inline onclick
-    Object.assign(window, { bump, openImage, closeImage, copyCard, copySummary, cancelOrder, toggleOrdering, saveCard, addDish, delDish, review, resetDay });
+    Object.assign(window, { bump, placeOrder, updateOrder, switchTab, openImage, closeImage, copyCard, copySummary, cancelOrder, toggleOrdering, saveCard, addDish, delDish, review, resetDay });
 
     if (tg){ tg.ready(); tg.expand(); }
     loadAll();

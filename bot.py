@@ -104,6 +104,29 @@ async def notify_admins_new_payment(bot, order: dict) -> None:
             logger.error(f"Could not send payment to admin {admin_id}: {e}")
 
 
+async def notify_admins_cash_order(bot, order: dict) -> None:
+    """Cash orders are auto-confirmed — just notify admins (no buttons) so they prepare."""
+    name = await db.get_name(order["user_id"])
+    username = await db.get_username(order["user_id"])
+    handle = f" (@{esc(username)})" if username else ""
+    lines = [
+        f"  • {esc(str(it['qty']))} × {esc(it['name'])} — {fmt_money(it['qty'] * it['unit_price'])}"
+        for it in order["items"]
+    ]
+    text = (
+        f"💵 <b>Naqd buyurtma</b>  #{order['id']}\n"
+        f"👤 {esc(name)}{handle}\n\n"
+        f"🍽 <b>Buyurtma:</b>\n" + "\n".join(lines) + "\n\n"
+        f"💰 <b>Jami: {fmt_money(order['total'])}</b>  (naqd — yetkazishda olinadi)\n"
+        f"✅ Avtomatik tasdiqlandi."
+    )
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await bot.send_message(chat_id=admin_id, text=text, parse_mode=HTML)
+        except Exception as e:
+            logger.error(f"Could not send cash order to admin {admin_id}: {e}")
+
+
 async def notify_user_reviewed(bot, user_id: int, accepted: bool) -> None:
     if accepted:
         text = "✅ <b>Buyurtmangiz tasdiqlandi!</b>\nYoqimli ishtaha! 🍽"
@@ -243,10 +266,14 @@ def report_text(summary: dict) -> str:
             for d in summary["dishes"]
         ]
         body = "\n".join(lines)
+    card = summary.get("card", {"n": 0, "money": 0})
+    cash = summary.get("cash", {"n": 0, "money": 0})
     text = (
         "📊 <b>Bugungi buyurtmalar yakuni</b>\n\n"
         + body
-        + f"\n\n✅ Jami: <b>{summary['order_count']} ta</b> buyurtma — "
+        + f"\n\n💳 Karta: <b>{card['n']} ta</b> — {fmt_money(card['money'])}"
+        + f"\n💵 Naqd: <b>{cash['n']} ta</b> — {fmt_money(cash['money'])}"
+        + f"\n\n✅ Jami: <b>{summary['order_count']} ta</b> — "
         f"<b>{fmt_money(summary['money'])}</b>"
     )
     if summary["unpaid"]:

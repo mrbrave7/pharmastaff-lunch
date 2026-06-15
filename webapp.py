@@ -104,19 +104,43 @@ def _menu_out(item: dict) -> dict:
 def _order_out(order: dict | None) -> dict | None:
     if not order:
         return None
+    method = order.get("payment_method", "card")
+    # Editable/cancellable while not a finalized card payment: card pending, or cash
+    # confirmed (cash is paid at pickup). Gated by the daily cutoff.
+    changeable = order["status"] == "pending_payment" or (
+        order["status"] == "confirmed" and method == "cash"
+    )
+    allowed = changeable and config.cancellation_allowed()
     return {
         "id": order["id"],
         "status": order["status"],
+        "payment_method": method,
         "total": order["total"],
         "items": [
-            {"name": it["name"], "qty": it["qty"], "unit_price": it["unit_price"]}
+            {
+                "menu_item_id": it["menu_item_id"],
+                "name": it["name"],
+                "qty": it["qty"],
+                "unit_price": it["unit_price"],
+            }
             for it in order["items"]
         ],
-        # Confirmed orders are locked; cancel is only allowed before confirmation
-        # and before the daily cutoff hour.
-        "can_cancel": order["status"] in db.CANCELLABLE_STATUSES
-        and config.cancellation_allowed(),
+        "can_cancel": allowed,
+        "can_edit": allowed,
     }
+
+
+def _parse_items(body: dict) -> list[tuple[int, int]]:
+    items = body.get("items")
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="empty_cart")
+    requested = []
+    for it in items:
+        try:
+            requested.append((int(it["id"]), int(it["qty"])))
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="bad_item")
+    return requested
 
 
 # ── File helpers ─────────────────────────────────────────────────────────────
@@ -172,19 +196,33 @@ async def create_order(request: Request):
         body = await request.json()
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
-    items = body.get("items")
-    if not isinstance(items, list) or not items:
-        raise HTTPException(status_code=400, detail="empty_cart")
-    requested = []
-    for it in items:
-        try:
-            requested.append((int(it["id"]), int(it["qty"])))
-        except (KeyError, TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="bad_item")
+    requested = _parse_items(body)
+    method = "cash" if body.get("payment_method") == "cash" else "card"
     try:
-        order = await db.create_order(int(user["id"]), requested)
+        order = await db.create_order(int(user["id"]), requested, method)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    if method == "cash":
+        await botmod.notify_admins_cash_order(_bot(request), order)
+    return _order_out(order)
+
+
+@router.put("/order/{order_id}")
+async def edit_order(order_id: int, request: Request):
+    """Change the items of an editable order (add more / adjust quantities)."""
+    user = await _require_user(request)
+    if not config.cancellation_allowed():
+        raise HTTPException(status_code=403, detail="cutoff_passed")
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    requested = _parse_items(body)
+    try:
+        order = await db.update_order_items(int(user["id"]), order_id, requested)
+    except ValueError as e:
+        code = 404 if str(e) == "order_not_found" else 409
+        raise HTTPException(status_code=code, detail=str(e))
     return _order_out(order)
 
 
@@ -291,6 +329,7 @@ async def admin_orders(request: Request):
             "id": o["id"],
             "name": o["name"],
             "status": o["status"],
+            "payment_method": o.get("payment_method", "card"),
             "total": o["total"],
             "items": [{"name": it["name"], "qty": it["qty"]} for it in o["items"]],
         })
